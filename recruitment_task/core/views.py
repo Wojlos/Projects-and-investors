@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 
 from core.businesslogic.errors import CannotInvestIntoProjectException
 from core.businesslogic.investing import invest_into_project
+from core.businesslogic.matching import match_investors_to_project, matching_projects_to_investor
 from core.models import Project, Investor
 from core.serializers import ProjectSerializer, ProjectDetailsSerializer, InvestorSerializer, InvestorDetailsSerializer
 
@@ -19,7 +20,6 @@ class ProjectsView(generics.ListCreateAPIView):
         serializer.save()
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-
 
 class ProjectDetailsView(generics.RetrieveUpdateAPIView):
     queryset = Project.objects.all()
@@ -36,6 +36,31 @@ class ProjectDetailsView(generics.RetrieveUpdateAPIView):
         serializer.save()
 
         return Response(serializer.data)
+
+
+class ProjectMatchesView(generics.ListAPIView):
+    queryset = Investor.objects.all()
+    serializer_class = InvestorSerializer
+
+    def get(self, request, pk, *args, **kwargs):
+        project = Project.objects.filter(id = pk).first()
+        
+        if not project:
+            return Response(
+                    data={"details": "Project with selected id does not exist."},
+                    status=status.HTTP_404_NOT_FOUND
+                    )
+
+        if project.funded:
+            return Response(
+                    data={"details": "Project already funded."}, 
+                    status=status.HTTP_204_NO_CONTENT
+                    )
+
+        queryset = match_investors_to_project(project)
+        serializer = self.get_serializer(queryset, many = True)
+        
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class InvestorsView(generics.ListCreateAPIView):
@@ -63,6 +88,24 @@ class InvestorDetailsView(generics.RetrieveUpdateAPIView):
 
         return Response(serializer.data)
 
+
+class InvestorMatchesView(generics.ListAPIView):
+    queryset = Project.objects.all()
+    serializer_class = ProjectSerializer
+
+    def get(self, request, pk, *args, **kwargs):
+        investor = Investor.objects.filter(id = pk).first()
+        
+        if not investor:
+            return Response(
+                    data={"details": "Investor with selected id does not exist."},
+                    status=status.HTTP_404_NOT_FOUND
+                    )
+
+        queryset = matching_projects_to_investor(investor)
+        serializer = self.get_serializer(queryset, many = True)        
+        
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 class InvestIntoProject(APIView):
     def post(self, request, pk, project_id):
